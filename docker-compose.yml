@@ -1,0 +1,17 @@
+version: '3.8'
+
+services:
+  kubesentinel:
+    build: .
+    container_name: kubesentinel-test
+    environment:
+      - KUBECONFIG=/config/.kubeconfig
+    volumes:
+      - ~/.kube:/config:ro
+    command: ["scan", "-n", "production", "-o", "json"]
+
+  # Mock K8s API for testing
+  mock-k8s:
+    image: nginx:alpine
+    ports:
+      - "8080:80"
