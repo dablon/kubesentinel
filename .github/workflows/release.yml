@@ -1,46 +1,50 @@
-name: Build and Release
+name: Release
 
 on:
   push:
     tags:
       - 'v*'
-  workflow_dispatch:
 
 jobs:
   build:
     runs-on: ubuntu-latest
     strategy:
       matrix:
-        goos: [linux, darwin, windows]
-        goarch: [amd64, arm64]
-        exclude:
+        include:
+          - goos: linux
+            goarch: amd64
+          - goos: linux
+            goarch: arm64
+          - goos: darwin
+            goarch: amd64
           - goos: darwin
             goarch: arm64
           - goos: windows
-            goarch: arm64
+            goarch: amd64
 
     steps:
-      - uses: actions/checkout@v4
-      
+      - name: Checkout
+        uses: actions/checkout@v4
+
       - name: Set up Go
         uses: actions/setup-go@v5
         with:
-          go-version: '1.21'
-      
+          go-version: '1.24'
+
       - name: Build
         env:
           GOOS: ${{ matrix.goos }}
           GOARCH: ${{ matrix.goarch }}
         run: |
-          EXT=""
+          ext=""
           if [ "$GOOS" = "windows" ]; then
-            EXT=".exe"
+            ext=".exe"
           fi
-          OUTPUT_NAME="kubesentinel-${GOOS}-${GOARCH}${EXT}"
-          CGO_ENABLED=0 GOOS=$GOOS GOARCH=$GOARCH go build -ldflags="-s -w" -o "$OUTPUT_NAME" ./cmd
-      
+          name="kubesentinel-${GOOS}-${GOARCH}${ext}"
+          CGO_ENABLED=0 go build -ldflags="-s -w" -o "$name" ./cmd
+
       - name: Upload Release Asset
-        uses: softprops/action-gh-release@v1
+        uses: softprops/action-gh-release@v2
         with:
           tag_name: ${{ github.ref_name }}
           files: kubesentinel-*
@@ -53,5 +57,6 @@ jobs:
       - uses: actions/checkout@v4
       - uses: actions/setup-go@v5
         with:
-          go-version: '1.21'
+          go-version: '1.24'
       - run: go test -v -cover ./...
+      - run: go build -ldflags="-s -w" ./cmd
