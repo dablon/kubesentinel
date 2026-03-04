@@ -1,32 +1,53 @@
 package config
 
 import (
-	"os"
 	"fmt"
+	"os"
+	"path/filepath"
 )
 
 type Config struct {
 	Kubeconfig string `yaml:"kubeconfig"`
 	Namespace  string `yaml:"namespace"`
 	Severity   string `yaml:"severity"`
-	Output    string `yaml:"output"`
+	Output     string `yaml:"output"`
 }
 
 func Default() *Config {
 	return &Config{
-		Kubeconfig: os.Getenv("KUBECONFIG"),
-		Namespace: "all",
-		Severity:  "all",
-		Output:    "text",
+		Kubeconfig: resolveKubeconfig(""),
+		Namespace:  "all",
+		Severity:   "all",
+		Output:     "text",
 	}
 }
 
 func Load(path string) (*Config, error) {
-	if path == "" {
-		return Default(), nil
+	cfg := Default()
+	if path != "" {
+		cfg.Kubeconfig = resolveKubeconfig(path)
 	}
-	// In full implementation, would parse YAML file
-	return Default(), nil
+	return cfg, nil
+}
+
+// resolveKubeconfig determines the kubeconfig path.
+// Priority: explicit path > KUBECONFIG env > ~/.kube/config
+func resolveKubeconfig(explicit string) string {
+	if explicit != "" {
+		return explicit
+	}
+	if env := os.Getenv("KUBECONFIG"); env != "" {
+		return env
+	}
+	home, err := os.UserHomeDir()
+	if err != nil {
+		return ""
+	}
+	defaultPath := filepath.Join(home, ".kube", "config")
+	if _, err := os.Stat(defaultPath); err == nil {
+		return defaultPath
+	}
+	return ""
 }
 
 func (c *Config) Validate() error {

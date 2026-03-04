@@ -3,18 +3,20 @@ package main
 import (
 	"fmt"
 	"os"
-	"github.com/dablon/kubesentinel/internal/scanner"
+
 	"github.com/dablon/kubesentinel/internal/config"
+	"github.com/dablon/kubesentinel/internal/scanner"
 	"github.com/spf13/cobra"
 )
 
-var version = "1.0.0"
+var version = "2.0.0"
 
 var (
-	cfgFile   string
-	namespace string
-	output   string
-	severity string
+	cfgFile    string
+	kubeconfig string
+	namespace  string
+	output     string
+	severity   string
 )
 
 var rootCmd = &cobra.Command{
@@ -33,20 +35,39 @@ var scanCmd = &cobra.Command{
 			return fmt.Errorf("failed to load config: %w", err)
 		}
 
-		s := scanner.New(cfg)
+		if kubeconfig != "" {
+			cfg.Kubeconfig = kubeconfig
+		}
+
+		s, err := scanner.New(cfg)
+		if err != nil {
+			return fmt.Errorf("failed to connect to cluster: %w", err)
+		}
+
 		results, err := s.Scan(namespace, severity)
 		if err != nil {
 			return fmt.Errorf("scan failed: %w", err)
 		}
 
-		if output == "json" {
-			s.PrintJSON(results)
-		} else {
+		switch output {
+		case "json":
+			if err := s.PrintJSON(results); err != nil {
+				return fmt.Errorf("failed to write JSON: %w", err)
+			}
+		case "table":
+			s.PrintTable(results)
+		default:
 			s.PrintResults(results)
 		}
 
-		if results.HasCritical() {
+		// Graduated exit codes
+		switch {
+		case results.Summary.Critical > 0:
 			os.Exit(1)
+		case results.Summary.High > 0:
+			os.Exit(2)
+		case results.Summary.Medium > 0:
+			os.Exit(3)
 		}
 		return nil
 	},
@@ -64,9 +85,10 @@ func init() {
 	rootCmd.AddCommand(scanCmd)
 	rootCmd.AddCommand(versionCmd)
 	rootCmd.PersistentFlags().StringVarP(&cfgFile, "config", "c", "", "config file")
+	rootCmd.PersistentFlags().StringVar(&kubeconfig, "kubeconfig", "", "path to kubeconfig file")
 	rootCmd.PersistentFlags().StringVarP(&namespace, "namespace", "n", "", "namespace to scan")
-	rootCmd.PersistentFlags().StringVarP(&output, "output", "o", "text", "output format (text/json)")
-	rootCmd.PersistentFlags().StringVarP(&severity, "severity", "s", "all", "severity filter")
+	rootCmd.PersistentFlags().StringVarP(&output, "output", "o", "text", "output format (text/json/table)")
+	rootCmd.PersistentFlags().StringVarP(&severity, "severity", "s", "all", "severity filter (all, critical, high, medium, low, or high+ for high and above)")
 	scanCmd.Flags().BoolVarP(&scanner.Verbose, "verbose", "v", false, "verbose output")
 }
 
