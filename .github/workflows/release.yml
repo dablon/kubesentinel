@@ -5,29 +5,58 @@ on:
     tags:
       - 'v*'
 
+permissions:
+  contents: write
+
 jobs:
-  build:
+  release:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      
-      - uses: actions/setup-go@v4
         with:
-          go-version: '1.24'
-      
-      - name: Build
+          fetch-depth: 0
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version: '1.25'
+          cache: true
+
+      - name: Get version from tag
+        id: version
+        run: echo "VERSION=${GITHUB_REF_NAME}" >> $GITHUB_OUTPUT
+
+      - name: Build multiplatform binaries
         run: |
-          GOOS=linux GOARCH=amd64 CGO_ENABLED=0 go build -ldflags="-s -w" -o kubesentinel-linux ./cmd
-          GOOS=darwin GOARCH=amd64 CGO_ENABLED=0 go build -ldflags="-s -w" -o kubesentinel-darwin ./cmd
-          GOOS=windows GOARCH=amd64 CGO_ENABLED=0 go build -ldflags="-s -w" -o kubesentinel.exe ./cmd
-      
+          VERSION=${{ steps.version.outputs.VERSION }}
+          LDFLAGS="-s -w -X main.version=${VERSION}"
+          mkdir -p dist
+
+          # Linux amd64
+          GOOS=linux GOARCH=amd64 CGO_ENABLED=0 go build -ldflags="${LDFLAGS}" -o dist/kubesentinel-linux-amd64 ./cmd/kubesentinel
+          # Linux arm64
+          GOOS=linux GOARCH=arm64 CGO_ENABLED=0 go build -ldflags="${LDFLAGS}" -o dist/kubesentinel-linux-arm64 ./cmd/kubesentinel
+          # macOS amd64 (Intel)
+          GOOS=darwin GOARCH=amd64 CGO_ENABLED=0 go build -ldflags="${LDFLAGS}" -o dist/kubesentinel-darwin-amd64 ./cmd/kubesentinel
+          # macOS arm64 (Apple Silicon)
+          GOOS=darwin GOARCH=arm64 CGO_ENABLED=0 go build -ldflags="${LDFLAGS}" -o dist/kubesentinel-darwin-arm64 ./cmd/kubesentinel
+          # Windows amd64
+          GOOS=windows GOARCH=amd64 CGO_ENABLED=0 go build -ldflags="${LDFLAGS}" -o dist/kubesentinel-windows-amd64.exe ./cmd/kubesentinel
+
+      - name: Generate checksums
+        run: |
+          cd dist
+          sha256sum * > checksums.txt
+
       - name: Create Release
-        uses: softprops/action-gh-release@v1
+        uses: softprops/action-gh-release@v2
         with:
           tag_name: ${{ github.ref_name }}
+          name: ${{ github.ref_name }}
+          generate_release_notes: true
           files: |
-            kubesentinel-linux
-            kubesentinel-darwin
-            kubesentinel.exe
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+            dist/kubesentinel-linux-amd64
+            dist/kubesentinel-linux-arm64
+            dist/kubesentinel-darwin-amd64
+            dist/kubesentinel-darwin-arm64
+            dist/kubesentinel-windows-amd64.exe
+            dist/checksums.txt
