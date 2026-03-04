@@ -121,6 +121,3 @@ docker run --rm -v ~/.kube:/root/.kube:ro kubesentinel scan -n production
 
 MIT License - See LICENSE file for details.
 
-## Author
-
-Created by Anvil - Application Builder
